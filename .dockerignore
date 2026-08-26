@@ -1,0 +1,9 @@
+/target
+/backend/target
+/frontend/build
+.mvn
+.git
+.idea
+.vscode
+node_modules
+*.log

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "Maven wrapper stub: please install Maven or run using your system mvn"
+exit 0

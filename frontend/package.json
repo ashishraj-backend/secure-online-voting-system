@@ -1,0 +1,19 @@
+{
+  "name": "secure-voting-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "parcel src/index.html --port 3000",
+    "build": "parcel build src/index.html --dist-dir build"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "sockjs-client": "^1.5.2",
+    "stompjs": "^2.3.3",
+    "react-router-dom": "^6.13.0"
+  },
+  "devDependencies": {
+    "parcel": "2.10.0"
+  }
+}

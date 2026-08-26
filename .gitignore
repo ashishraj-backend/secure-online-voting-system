@@ -1,0 +1,11 @@
+target/
+.idea/
+.vscode/
+node_modules/
+/backend/target/
+/frontend/node_modules/
+.env
+*.iml
+/.mvn
+/.gradle
+logs/
