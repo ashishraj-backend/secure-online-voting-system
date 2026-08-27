@@ -1,89 +1,190 @@
 # Secure Real-Time Online Voting System
 
-This repository contains a production-approachable prototype for a secure real-time online voting system. It includes a Spring Boot backend, Flyway migrations for MySQL, Redis integration for caching and rate-limiting, STOMP over WebSocket for live results, and a React frontend.
+A prototype online voting application with a Spring Boot API and React frontend. The backend uses MySQL for persistence, Flyway for schema migrations, Redis for caching and short-lived voting authorizations, and STOMP over WebSocket for live result updates.
 
-Core components
-- Backend: Java 21, Spring Boot 3.x, Spring Security, Spring Data JPA
-- Database migrations: Flyway (MySQL 8)
-- Cache/short-lived tokens & rate-limiting: Redis
-- Frontend: React 18 + Parcel
-- Realtime: Spring STOMP over WebSocket
-- CI: GitHub Actions (build & tests)
+## Features
 
-Quick start (recommended)
+- Voter registration and JWT-based login
+- Admin election and candidate management
+- Scheduled election lifecycle: schedule, start, close, and publish results
+- One-time voting authorization tokens
+- Duplicate-vote protection at the service and database layers
+- Rate limiting for registration, login, authorization, and voting attempts
+- Live election results over WebSocket
+- Health and OpenAPI endpoints
 
-1. Copy `.env.example` to `.env` and set required variables: `JWT_SECRET`, `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD`.
-2. Start the stack with Docker Compose:
+## Technology
+
+- Backend: Java 21, Spring Boot 3.2, Spring Security, Spring Data JPA
+- Database: MySQL 8 with Flyway migrations
+- Cache and rate limiting: Redis 7
+- Frontend: React 18, React Router, Parcel
+- Local orchestration: Docker Compose
+
+## Quick Start With Docker
+
+Prerequisites: Docker Desktop with Compose enabled.
+
+From the repository root, run:
 
 ```bash
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
-This launches MySQL, Redis, the backend, and a production build of the frontend.
+The services are available at:
 
-Developer flow (without Docker)
+| Service | URL | Purpose |
+| --- | --- | --- |
+| Frontend | http://localhost:3001 | React application |
+| Backend API | http://localhost:8081 | REST API |
+| Backend health | http://localhost:8081/actuator/health | Service health |
+| Swagger UI | http://localhost:8081/swagger-ui/index.html | API documentation |
+| MySQL | `localhost:3307` | Database access |
+| Redis | `localhost:6380` | Cache access |
 
-Backend (requires Java 21 + Maven):
+The Compose file currently uses development credentials. Change them before using the application outside a local environment, especially `JWT_SECRET`, database passwords, and the seeded admin password.
+
+Stop the services with:
+
+```bash
+docker compose -f docker/docker-compose.yml down
+```
+
+To remove the persisted MySQL volume as well:
+
+```bash
+docker compose -f docker/docker-compose.yml down -v
+```
+
+## Run Without Docker
+
+Start MySQL and Redis separately, then configure the backend with environment variables. Java 21 and Maven are required.
 
 ```bash
 cd backend
-mvn -B spring-boot:run
+mvn spring-boot:run
 ```
 
-Frontend (development):
+The backend defaults to `http://localhost:8080` and uses these local defaults:
+
+```text
+JDBC_URL=jdbc:mysql://localhost:3307/voting?useSSL=false&allowPublicKeyRetrieval=true
+DB_USER=user
+DB_PASSWORD=password
+REDIS_HOST=localhost
+REDIS_PORT=6379
+JWT_SECRET=change_this_in_env
+```
+
+For the frontend, install Node.js 18 or newer and run:
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm start
 ```
 
-Set `REACT_APP_API_BASE` to the backend base URL when running the frontend (default `http://localhost:8080`).
+Parcel serves the frontend at `http://localhost:3000`. The frontend API base URL is configured in `frontend/src/services/api.js`; use the backend URL that matches how the backend was started.
 
-API highlights
-- `POST /api/auth/register` — register a voter
-- `POST /api/auth/login` — obtain JWT
-- `GET /api/elections` — list elections
-- `POST /api/elections/{id}/authorization` — request one-time voting authorization (requires JWT)
-- `POST /api/elections/{id}/votes` — cast vote (requires JWT + `Authorization-Token` header)
-- `GET /api/elections/{id}/results` — fetch current results
-- WebSocket STOMP topic: `/topic/election.{id}.results` — subscribe to live tallies
+## API Overview
 
-Seeded admin (for development)
-- email: `admin@example.com`
-- password: `AdminPass123`
+Authentication endpoints return a JWT in a response such as `{ "token": "..." }`.
 
-Security & safety notes
-- Passwords hashed with BCrypt.
-- JWT bearer authentication used for both REST and STOMP CONNECT.
-- Database-level unique constraint prevents duplicate votes; service layer marks one-time voting authorizations as consumed.
-- Redis used for one-time tokens and rate-limiting to mitigate automated abuse.
+```http
+POST /api/auth/register
+Content-Type: application/json
 
-Running tests
+{
+	"name": "Example Voter",
+	"email": "voter@example.com",
+	"password": "StrongPassword123"
+}
+```
 
-Backend tests (unit & integration):
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+	"email": "voter@example.com",
+	"password": "StrongPassword123"
+}
+```
+
+Voting requires both the JWT bearer token and a fresh authorization token:
+
+```http
+POST /api/elections/{electionId}/authorization
+Authorization: Bearer <jwt>
+```
+
+```http
+POST /api/elections/{electionId}/votes
+Authorization: Bearer <jwt>
+Authorization-Token: <one-time-token>
+Content-Type: application/json
+```
+
+Additional endpoints include:
+
+- `GET /api/elections/{id}/results` to retrieve totals and candidate percentages
+- `POST /api/admin/elections` to create an election
+- `PUT /api/admin/elections/{id}` to update an election
+- `DELETE /api/admin/elections/{id}` to delete an election
+- `POST /api/admin/elections/{id}/candidates` to add a candidate
+- `POST /api/admin/elections/{id}/schedule?start=<ISO-8601>&end=<ISO-8601>` to schedule an election
+- `POST /api/admin/elections/{id}/start`, `/close`, and `/publish` for lifecycle transitions
+- `GET /api/admin/audit-logs` to read audit events
+
+The WebSocket endpoint is `/ws`. STOMP clients subscribe to `/topic/election.{id}.results` for result updates. Admin endpoints require an authenticated admin account.
+
+## Development Admin
+
+The development seed data provides:
+
+```text
+Email:    admin@example.com
+Password: AdminPass123
+```
+
+Do not use these credentials in a deployed environment.
+
+## Testing
+
+Run backend tests with:
 
 ```bash
 cd backend
 mvn test
 ```
 
-CI / GitHub Actions
-- The repo contains workflows under `.github/workflows/` that build and test the backend and build the frontend. Pushing to `main` triggers CI.
+Build the frontend with:
 
-Where to look
-- Backend main: `backend/src/main/java`
-- Flyway migrations: `backend/src/main/resources/db/migration`
-- Frontend: `frontend/src`
-- Compose orchestration: `docker/docker-compose.yml`
+```bash
+cd frontend
+npm run build
+```
 
-Next steps I will perform (sequential)
-1. Finish and expand README with diagrams and API examples (this file).
-2. Attempt to install Maven locally (in workspace) and build the backend artifact.
-3. Install Docker Desktop and start the stack with `docker compose up --build` (requires approving installer GUI on Windows).
-4. Run smoke tests against the running backend and frontend; then finalize documentation and CI notes.
+## Security Notes
 
-If you want me to start step 2 now (install Maven and build), reply `start step 2`. If you prefer I proceed fully and handle prompts, reply `go` and I'll continue.
+- Passwords are hashed with BCrypt.
+- JWTs protect REST requests and WebSocket STOMP connections.
+- Authorization tokens are short-lived and consumed after use.
+- Redis-backed rate limits reduce automated abuse of sensitive endpoints.
+- Database constraints and service checks prevent duplicate votes.
+- This is a prototype and requires a security review, production secret management, HTTPS, monitoring, and an appropriate election audit process before real-world use.
+
+## Repository Layout
+
+```text
+backend/                  Spring Boot API and tests
+backend/src/main/resources/db/migration/
+													Flyway database migrations
+frontend/                 React application
+docker/docker-compose.yml Local MySQL, Redis, backend, and frontend stack
+```
+
+There is currently no GitHub Actions workflow in this repository. CI can be added under `.github/workflows/` when the project is ready for automated builds and tests.
 
 
 
